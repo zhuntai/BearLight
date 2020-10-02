@@ -1,3 +1,9 @@
+/*These define statements are establishing
+the hexadecimal color codes as constants
+in the header file, meaning they are not
+changeable entities in the .c programs
+*/
+
 #define CLRRED 0xff0000
 #define CLRGREEN 0x00ff00
 #define CLRBLUE 0x0000ff
