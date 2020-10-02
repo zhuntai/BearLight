@@ -1,3 +1,7 @@
+//Lots of the code here from Lady Ada / Adafruit industries learning guides. She/they're awesome so go buy some of their stuff.
+//Also other code stolen off of the internet. Feel free to let me know for credits and I will add it on.
+
+//Include libraries and files for defined colours/IR codes/sounds
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_CircuitPlayground.h>
@@ -7,14 +11,17 @@
 #include "colourrgbs.h"
 #include "sounds.h"
 
+//Adjustable parameters for short/long animation timeouts, debounce/triggers for capacitive touch
+//Setting the short delay very short impacts IR performance (not enough time to detect)
 #define SCANDELAY 100
 #define SHORTDELAY 100
 #define LONGDELAY 500
 #define HOLDDELAY 3000
 #define SAVEDELAY 10000
 
-// Create a structure The "valid" variable is set to "true" once
-// the structure is filled with actual data for the first time.
+// Create a structure The "valid" variable is set to "true" once the structure is filled with actual data for the first time.
+// Sets up flash storage structure to store solid colours in slots 1 and 2. Full animation parameters stored in slots 3 and 4.
+// Not that slots 3 and 4 will need to be removed if using colour sensor because those touch points are used for I2C
 typedef struct {
   boolean valid;
   unsigned long flashcolour1;
@@ -27,6 +34,7 @@ typedef struct {
   int flashbrightness4 = 2;
 } Storage;
 
+//Variables for various things throughout the code. Can change some to change default settings when powered on.
 int anim3 = 0;
 int anim4 = 0;
 int brightness3 = 2;
@@ -58,15 +66,19 @@ unsigned long lastir = 0;
 unsigned long lastbutton = 0;
 unsigned long lastready = 0;
 
+//Initialist colour sensor (if applicable) and EEPROM
 //Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
 FlashStorage(flashstorage, Storage);
 Storage savedcolours;
 
+//Interrupt subroutine triggered if device is double-tapped
 void isrdoubletapped(void)
 {
   doubletapped = 1;
 }
 
+//Subroutine for when turning on the lightshow (and/or resetting to default settings)
+//Enables Secret Mode if touch 6 is touched when at turn on
 void turnon(void)
 {
   randomSeed(millis());
@@ -87,6 +99,7 @@ void turnon(void)
   animate();
 }
 
+//Subroutine for when turning off the lightshow (and/or resetting to default settings (normal mode) out of Secret Mode)
 void turnoff(void)
 {
   if(secret==1)
@@ -105,6 +118,7 @@ void turnoff(void)
   animate();
 }
 
+//Turn brightness up. To a limit.
 void brightnessup(void)
 {
   brightness++;
@@ -118,6 +132,7 @@ void brightnessup(void)
   animate();
 }
 
+Turn brightness down. To a limit.
 void brightnessdown(void)
 {
   brightness--;
@@ -131,8 +146,10 @@ void brightnessdown(void)
   animate();
 }
 
+//This is the main subroutine for the entire project and determines what the next display is and when it changes
 void animate(void)
 {
+  //Selected animation has changed
   if(animation!=lastanimation)
   {
     animationstep = 0;
@@ -140,7 +157,11 @@ void animate(void)
     animationbrightness = brightness;
     lastanimation = animation;
   }
+  
+  //Debugging over usb serial
   Serial.println("Animation: " + String(animation) + " | Step: " + String(animationstep) + " | Brightness: " + String(brightness) + " | Animation brightness: " + String(animationbrightness));
+  
+  //What animation is currently selected. Each has different LONG or SHORT delay between steps. Or HOLDDELAY for no animation to reduce cycles.
   switch(animation)
   {
     case 0: //No animation
@@ -150,6 +171,7 @@ void animate(void)
           pixelcolours[i] = targetcolour;
         }
         
+        //If slide switch set then additional debugging for capacitive touch raw values
         if(CircuitPlayground.slideSwitch())
         {
           Serial.println("Cap  6: " + String(CircuitPlayground.readCap(6)));
@@ -470,12 +492,15 @@ void animate(void)
   if(ack>0) { playeffect(); }
 }
 
+//Subroutine to enable storing of colours to memory slots/EEPROM
 void getreadytostore()
 {
   readytostore = 1;
   lastready = millis();
 }
 
+//Sound effect needed based on acknowledgement code of previous cycle if any
+//1: Wurr, 2: On, 3: Off, 4: Hmm, 5: Ok, 6: Oops
 void playeffect(void)
 {
   switch(ack)
@@ -523,6 +548,7 @@ void playeffect(void)
       }
       break;
   }
+  //Clean up readytostore if any other instruction
   if(readytostore==1)
   {
     if(ack!=4)
@@ -535,6 +561,7 @@ void playeffect(void)
   CircuitPlayground.speaker.end();
 }
 
+//Colour sense code. Will use the neopixel closest to the light sensor in this version. Otherwise can use I2C colour sensor.
 void sensecolour(void)
 {
   uint8_t red, green, blue;
@@ -570,6 +597,7 @@ void sensecolour(void)
   //colorWipe(strip.Color(gammatable[(int)r], gammatable[(int)g], gammatable[(int)b]), 0);  
 }
 
+//Save to eeprom
 void writeflash(void)
 {
   readytostore = 0;
@@ -603,11 +631,13 @@ void writeflash(void)
   playeffect();
 }
 
+//Void Setup
 void setup()
 {
   CircuitPlayground.begin();
   Serial.begin(9600);
 
+  //Debugging mode. Wait for serialusb
   if(CircuitPlayground.slideSwitch())
   {
     CircuitPlayground.redLED(HIGH);
@@ -627,6 +657,7 @@ void setup()
     Serial.println("No TCS34725 found ... check your connections");
   }*/
 
+  //EEPROM stuff
   savedcolours = flashstorage.read();
   if(savedcolours.valid == false)
   {
@@ -670,6 +701,7 @@ void setup()
   Serial.print ("Brightness 4: ");
   Serial.println (brightness4);
   
+  //Define double-tap sensitivity
   CircuitPlayground.setAccelRange(LIS3DH_RANGE_2_G); 
 
   // 0 = turn off click detection & interrupt
@@ -684,6 +716,7 @@ void setup()
   // have a procedure called when a tap is detected
   attachInterrupt(digitalPinToInterrupt(CPLAY_LIS3DH_INTERRUPT), isrdoubletapped, FALLING);
 
+  //Ready. Turn it on at power-up.
   ack = 2;
   turnon();
 }
@@ -734,6 +767,7 @@ void loop()
     delay(20);
     if (CircuitPlayground.readCap(1) > 400) { scancode+=16; }
 
+    //2 scans in a row confirms the action. Delay between of SCANDELAY.
     if(lastscancode==scancode)
     {
       lastscancode=0;
